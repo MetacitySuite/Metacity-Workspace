@@ -1,9 +1,10 @@
-import { LayerLoader } from "./loader";
-import { Mesh, BufferGeometry, BufferAttribute } from "three";
-import { Graphics } from "./graphics";
-import { ObjectSelection } from "./selection";
-import { MaterialLibrary, MaterialLibraryProps } from "./material";
-import { Style, StylerWorkerPool } from "./styles";
+import { LayerLoader } from './loader';
+import { Mesh, BufferGeometry, BufferAttribute, Points, Vector3, BoxGeometry } from 'three';
+import { Graphics } from './graphics';
+import { ObjectSelection } from './selection';
+import { MaterialLibrary, MaterialLibraryProps } from './material';
+import { Style, StylerWorkerPool } from './styles';
+import { LayerType } from './types';
 
 export type LayerProps = {
     path: string;
@@ -13,14 +14,19 @@ export type LayerProps = {
     styles?: Style[];
 }
 
+export type MetadataRecord = any;
+
 export type MetadataTable = {[id: number]: any};
+
 
 type ParsedGeometry = {
     positions: Float32Array;
     normals: Float32Array;
     ids: Float32Array;
     metadata: MetadataTable;
+    type: LayerType;
 }
+
 
 export class Layer {
     name: string;
@@ -49,15 +55,15 @@ export class Layer {
 
     private addMetadata(metadata: MetadataTable) {
         for (const id in metadata) {
-            if (this.metadata.hasOwnProperty(id)) {
-                console.log("conflict", id, this.metadata[id], metadata[id]);
+            if (Object.prototype.hasOwnProperty.call(this.metadata, id)) {
+                console.log('conflict', id, this.metadata[id], metadata[id]);
             }
             this.metadata[id] = metadata[id];
         }
     }
 
     private getMetadata(id: number) {
-        if (this.metadata.hasOwnProperty(id)) {
+        if (Object.prototype.hasOwnProperty.call(this.metadata, id)) {
             console.log(this.metadata[id]);
             return this.metadata[id];
         }
@@ -84,32 +90,65 @@ export class Layer {
         this.selection.length = 0;
     }
 
+    loadingPlaceholder(position: Vector3, size: Vector3) {
+        console.log(position, size);
+        const s = Math.min(size.x, size.y) / 2;
+        const geometry = new BoxGeometry(s, s, s / 20);
+        const material = this.materialLibrary.loading;
+        const mesh = new Mesh(geometry, material);
+        mesh.position.copy(position.addScaledVector(size, 0.5));
+        this.graphics.scene.add(mesh);
+        
+        let tick = 0;
+        mesh.onBeforeRender = () => {
+            const scl = Math.sin(tick++ / 20) * 0.3 + 0.7;
+            mesh.scale.set(scl, scl, scl);
+        };
+
+        return mesh;
+    }
+
     onDataLoaded(parsed_geometry: ParsedGeometry) {
         this.addMetadata(parsed_geometry.metadata);
-        const geometry = new BufferGeometry();
-        geometry.setAttribute('position', new BufferAttribute(parsed_geometry.positions, 3));
-        geometry.setAttribute('normal', new BufferAttribute(parsed_geometry.normals, 3));
-        geometry.setAttribute('idcolor', new BufferAttribute(parsed_geometry.ids, 3));
-        const m = new Mesh(geometry, this.materialLibrary.default);
-        this.graphics.scene.add(m);
-        this.graphics.needsRedraw = true;
 
-        this.styles.forEach((style) => {
-            StylerWorkerPool.Instance.process({
-                style: style,
-                metadata: parsed_geometry.metadata,
-                ids: parsed_geometry.ids
-            }, (results) => {
-                const { color } = results;
-                geometry.setAttribute('color', new BufferAttribute(color, 3));
-                this.materialLibrary.default.vertexColors = true;
-                this.materialLibrary.default.needsUpdate = true;
-                this.graphics.needsRedraw = true;
-            })
-        });
 
-        if (this.pickable) {
-            this.graphics.picker.addPickable(m);
+        if (parsed_geometry.type === LayerType.Mesh) {
+            const geometry = new BufferGeometry();
+            geometry.setAttribute('position', new BufferAttribute(parsed_geometry.positions, 3));
+            geometry.setAttribute('normal', new BufferAttribute(parsed_geometry.normals, 3));
+            geometry.setAttribute('idcolor', new BufferAttribute(parsed_geometry.ids, 3));
+            const m = new Mesh(geometry, this.materialLibrary.default);
+            this.graphics.scene.add(m);
+            this.graphics.needsRedraw = true;
+
+            this.styles.forEach((style) => {
+                StylerWorkerPool.Instance.process({
+                    style: style,
+                    metadata: parsed_geometry.metadata,
+                    ids: parsed_geometry.ids
+                }, (results) => {
+                    const { color } = results;
+                    geometry.setAttribute('color', new BufferAttribute(color, 3));
+                    this.materialLibrary.default.vertexColors = true;
+                    this.materialLibrary.default.needsUpdate = true;
+                    this.graphics.needsRedraw = true;
+                });
+            });
+    
+            if (this.pickable) {
+                this.graphics.picker.addPickable(m);
+            }
+        } else if (parsed_geometry.type === LayerType.Points) {
+            const geometry = new BufferGeometry();
+            geometry.setAttribute('position', new BufferAttribute(parsed_geometry.positions, 3));
+            geometry.setAttribute('idcolor', new BufferAttribute(parsed_geometry.ids, 3));
+            const m = new Points(geometry, this.materialLibrary.point);
+            this.graphics.scene.add(m);
+            this.graphics.needsRedraw = true;
+
+            //if (this.pickable) {
+            //    this.graphics.picker.addPickable(m);
+            //}
         }
     }
 }

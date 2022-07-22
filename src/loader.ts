@@ -1,18 +1,17 @@
-import { Layer } from "./layer";
-import axios from "axios";
-import { Navigation } from "./navigation";
-import { Vector3 } from "three";
-import { WorkerPool } from "./workerPool";
+import { Layer } from './layer';
+import axios from 'axios';
+import { Vector3 } from 'three';
+import { WorkerPool } from './workerPool';
 
 
 export class LoaderWorkerPool extends WorkerPool  {
     private static _instance: LoaderWorkerPool;
-    static workerPath = "loaderWorker.js";
+    static workerPath = 'loaderWorker.js';
     private idOffset = 0;
     
     private constructor()
     {
-        super(LoaderWorkerPool.workerPath, 5);
+        super(LoaderWorkerPool.workerPath, 10);
     }
 
     public static get Instance()
@@ -50,7 +49,7 @@ type LayoutType = {
 export class LayerLoader {
     private layer: Layer;
     private path: string;
-    private layout: LayoutType | undefined;
+    private layout!: LayoutType;
 
     constructor(layer: Layer, path: string) {
         this.layer = layer;
@@ -98,27 +97,42 @@ export class LayerLoader {
         const ymedian = median(this.layout.tiles.map((tile) => tile.y)) * this.layout.tileHeight;
         const nav = this.layer.graphics.navigation;
         if (this.layer.graphics.navigation.isSet)
-            this.locate(nav.location.x, nav.location.y);
+            this.locate(nav.target.x, nav.target.y);
         else {
             const position = new Vector3(xmedian, ymedian, 1000);
             const target = new Vector3(xmedian, ymedian, 0);
             this.layer.graphics.focus(position, target);
             nav.setLocation(position, target);
-        }
-        
+        }        
     }
 
-    private loadTile(tile: TileType): any {
+    private loadTiles() {
+        if (!this.layout)
+            return;
+
+        this.layout.tiles.forEach((tile) => {
+            this.loadTile(tile);
+        }
+        );
+    }
+
+    private loadTile(tile: TileType) {
         if (tile.loaded)
             return;
 
+        const mesh = this.layer.loadingPlaceholder(new Vector3(tile.x * this.layout.tileWidth, tile.y * this.layout.tileHeight, 0), new Vector3(this.layout.tileWidth, this.layout.tileHeight, 0));
+
         tile.loaded = true;
         const path = `${this.path}/${tile.file}`;
+        const url = new URL(path, window.location.href);
+
         LoaderWorkerPool.Instance.process({
-            file: path,
+            file: url.toString(),
             objectsToLoad: tile.size
-         }, (scene) => {
+        }, (scene) => {
+            this.layer.graphics.scene.remove(mesh);
             this.layer.onDataLoaded(scene);
         });
+
     }
 }

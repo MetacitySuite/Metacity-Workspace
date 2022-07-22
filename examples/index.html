@@ -33,7 +33,7 @@
             });
 
             gl.loadLayer({
-                path: "/data/buildings",
+                path: "./data/buildings",
                 material: {
                     baseColor: 0xffffff,
                     lineColor: 0xfdbe56,
@@ -41,6 +41,7 @@
                 pickable: true,
                 styles: [
                     gl.style.withAttributeRange("height", 20, 50).useColor([
+                    //gl.style.forAll().useColor([
                      0xAED6F1,
                      0x229954,
                      0x27AE60,
@@ -65,16 +66,23 @@
             });
 
             gl.loadLayer({
-                path: "/data/terrain",
+                path: "./data/terrain",
                 material: {
                     baseColor: 0xeeeeee,
                 }
             });
 
             gl.loadLayer({
-                path: "/data/bridges",
+                path: "./data/bridges",
                 material: {
                     baseColor: 0xeeeeee,
+                }
+            });
+
+            gl.loadLayer({
+                path: "./data/trees",
+                material: {
+                    baseColor: 0x008800,
                 }
             });
         }
